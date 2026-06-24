@@ -1,10 +1,11 @@
-type Country = {
+export type Country = {
     name: string;
     countryId: number;
+    population: number;
     states?: State[];
 }
 
-type State = {
+export type State = {
     name: string;
     stateId: number;
     countryId: number;
@@ -12,7 +13,7 @@ type State = {
     districts?: District[];
 }
 
-type District = {
+export type District = {
     name: string;
     districtId: number;
     stateId: number;
@@ -20,7 +21,7 @@ type District = {
     cities?: City[];
 }
 
-type City = {
+export type City = {
     name: string;
     cityId: number;
     districtId: number;
@@ -65,7 +66,7 @@ export const districts: District[] = [
 // --- SAMPLE DATA ---
 
 export const countries: Country[] = [
-    { countryId: 1, name: "India" }
+    { countryId: 1, name: "India", population: 241000000 }
 ];
 
 export const states: State[] = [
@@ -79,14 +80,17 @@ export const getData = (): Country[] => {
 
     districts.forEach(district => {
         district.cities = cities.filter(city => city.districtId === district.districtId);
+        district.population = district.cities.reduce((total, city) => total + city.population, 0);
     })
 
     states.forEach(state => {
         state.districts = districts.filter(district => district.stateId === state.stateId);
+        state.population = state.districts.reduce((total, district) => total + district.population, 0);
     })
 
     countries.forEach(country => {
         country.states = states.filter(state => state.countryId === country.countryId);
+        country.population = country.states.reduce((total, state) => total + state.population, 0);
     })
     
     return countries;
