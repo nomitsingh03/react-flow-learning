@@ -1,4 +1,4 @@
-import { Edge, Node } from "@xyflow/react";
+import { Edge, MarkerType, Node } from "@xyflow/react";
 import { City, countries, Country, District, State } from "./data";
 import CustomNode, { NodeData } from "./CustomNode";
 
@@ -37,7 +37,7 @@ export const buildFlowGraph = (countries: Country[]): { nodes: FlowNode[], edges
 
         // Find middle state's y position
         const middleIndex = Math.floor((statePositions.length-1) / 2);
-        const countryY = statePositions[middleIndex]?.yPos || 0;
+        const countryY = (statePositions.length%2==0) ? (statePositions[middleIndex]?.yPos + statePositions[middleIndex+1]?.yPos)/2 : (statePositions[middleIndex]?.yPos || 0);
 
         // Create country node with centered position
         const countryNode: FlowNode = {
@@ -46,8 +46,9 @@ export const buildFlowGraph = (countries: Country[]): { nodes: FlowNode[], edges
             data: {
                 label: country.name,
                 type: 'country',
-                population: country.population
-            },
+                population: country.population,
+                expanded: true,
+            } as NodeData,
             position: { x: 0, y: countryY },
             style: {
                 width: NODE_WIDTH,
@@ -58,7 +59,26 @@ export const buildFlowGraph = (countries: Country[]): { nodes: FlowNode[], edges
 
         // Second pass: Create all nodes with calculated positions
         statePositions.forEach((stateInfo) => {
-            let state_gap = stateInfo.yPos;
+            // First: Calculate district positions to find the middle
+            const districtPositions: { district: District, yPos: number, totalHeight: number }[] = [];
+            let current_district_y = stateInfo.yPos;
+
+            stateInfo.state?.districts?.forEach(d => {
+                // Calculate height needed for this district and its children
+                let districtHeight = NODE_HEIGHT + NODE_V_GAP;
+                d.cities?.forEach(c => {
+                    districtHeight += NODE_HEIGHT + NODE_V_GAP;
+                });
+
+                districtPositions.push({ district: d, yPos: current_district_y, totalHeight: districtHeight });
+                current_district_y += districtHeight;
+            });
+
+            // Find middle district's y position
+            const middleDistrictIndex = Math.floor((districtPositions.length - 1) / 2);
+            const stateY = (districtPositions.length % 2 == 0) 
+                ? (districtPositions[middleDistrictIndex]?.yPos + districtPositions[middleDistrictIndex + 1]?.yPos) / 2
+                : (districtPositions[middleDistrictIndex]?.yPos || stateInfo.yPos);
 
             const stateNode: FlowNode = {
                 id: `state-${stateInfo.state.stateId}`,
@@ -66,9 +86,10 @@ export const buildFlowGraph = (countries: Country[]): { nodes: FlowNode[], edges
                 data: {
                     label: stateInfo.state.name,
                     type: 'state',
-                    population: stateInfo.state.population
-                },
-                position: { x: NODE_WIDTH + NODE_H_GAP, y: stateInfo.yPos },
+                    population: stateInfo.state.population,
+                    expanded: false
+                } as NodeData,
+                position: { x: NODE_WIDTH + NODE_H_GAP, y: stateY || current_district_y },
                 style: {
                     width: NODE_WIDTH,
                     height: NODE_HEIGHT
@@ -79,59 +100,101 @@ export const buildFlowGraph = (countries: Country[]): { nodes: FlowNode[], edges
             edges.push({
                 id: `country-${country.countryId}-state-${stateInfo.state.stateId}`,
                 source: `country-${country.countryId}`,
-                target: `state-${stateInfo.state.stateId}`
+                target: `state-${stateInfo.state.stateId}`,
+                markerEnd: {
+                    type: MarkerType.ArrowClosed,
+                    width: 30,
+                    height: 20,
+                    color: '#64748B',
+                    
+                },
+                style: {
+        strokeWidth: 2, // Thicker lines help arrows stand out
+        stroke: 'rgb(158, 161, 165)',
+    }
             });
 
-            stateInfo.state?.districts?.forEach(d => {
+            districtPositions.forEach((districtInfo) => {
+                // Calculate city positions to find the middle
+                const cityPositions: { city: City, yPos: number, totalHeight: number }[] = [];
+                let current_city_y = districtInfo.yPos;
+
+                districtInfo?.district?.cities?.forEach(city => {
+                    const cityHeight = NODE_HEIGHT + NODE_V_GAP;
+                    cityPositions.push({ city, yPos: current_city_y, totalHeight: cityHeight });
+                    current_city_y += cityHeight;
+                });
+
+                // Find middle city's y position
+                const middleCityIndex = Math.floor((cityPositions.length - 1) / 2);
+                const districtY = (cityPositions.length % 2 == 0)
+                    ? (cityPositions[middleCityIndex]?.yPos + cityPositions[middleCityIndex + 1]?.yPos) / 2
+                    : (cityPositions[middleCityIndex]?.yPos || districtInfo.yPos);
+
                 const dNode: FlowNode = {
-                    id: `dist-${d.districtId}`,
+                    id: `dist-${districtInfo.district.districtId}`,
                     type: 'customNode',
                     data: {
-                        label: d.name,
+                        label: districtInfo.district.name,
                         type: 'district',
-                        population: d.population
-                    },
-                    position: { x: 2 * (NODE_WIDTH + NODE_H_GAP), y: state_gap },
+                        population: districtInfo.district.population,
+                        expanded: false
+                    } as NodeData,
+                    position: { x: 2 * (NODE_WIDTH + NODE_H_GAP), y: districtY },
                     style: {
                         width: NODE_WIDTH,
                         height: NODE_HEIGHT
-                    }
+                    },
+                    hidden: true,
                 }
                 nodes.push(dNode);
 
                 edges.push({
-                    id: `state-${stateInfo.state.stateId}-dist-${d.districtId}`,
+                    id: `state-${stateInfo.state.stateId}-dist-${districtInfo.district.districtId}`,
                     source: `state-${stateInfo.state.stateId}`,
-                    target: `dist-${d.districtId}`
+                    target: `dist-${districtInfo.district.districtId}`,
+                    markerEnd: {
+                    type: MarkerType.ArrowClosed,
+                    width: 30,
+                    height: 20,
+                    color: '#64748B',
+                    
+                },
+                    hidden: true
                 });
 
-                let city_gap = state_gap;
-                d.cities?.forEach(city => {
+                cityPositions.forEach(cityInfo => {
                     const cityNode: FlowNode = {
-                        id: `city-${city.cityId}`,
+                        id: `city-${cityInfo.city.cityId}`,
                         type: 'customNode',
                         data: {
-                            label: city.name,
+                            label: cityInfo.city.name,
                             type: 'city',
-                            population: city.population
-                        },
-                        position: { x: 3 * (NODE_WIDTH + NODE_H_GAP), y: city_gap },
+                            population: cityInfo.city.population,
+                        } as NodeData,
+                        position: { x: 3 * (NODE_WIDTH + NODE_H_GAP), y: cityInfo.yPos },
                         style: {
                             width: NODE_WIDTH,
                             height: NODE_HEIGHT
-                        }
+                        },
+                        hidden: true
                     }
                     nodes.push(cityNode);
-                    city_gap += NODE_V_GAP + NODE_HEIGHT;
 
                     edges.push({
-                        id: `dist-${d.districtId}-city-${city.cityId}`,
-                        source: `dist-${d.districtId}`,
-                        target: `city-${city.cityId}`
+                        id: `dist-${districtInfo.district.districtId}-city-${cityInfo.city.cityId}`,
+                        source: `dist-${districtInfo.district.districtId}`,
+                        target: `city-${cityInfo.city.cityId}`,
+                         markerEnd: {
+                    type: MarkerType.ArrowClosed,
+                    width: 30,
+                    height: 20,
+                    color: '#64748B',
+                    
+                },
+                        hidden: true
                     })
                 })
-
-                state_gap = city_gap + NODE_V_GAP;
             });
         })
     })
