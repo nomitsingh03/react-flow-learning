@@ -109,6 +109,8 @@ function App() {
         defaultEdgeOptions={{
           style: { stroke: '#cbcbd1', strokeWidth: 2 },
         }}
+              nodesDraggable={false}
+              draggable={false}
       >
         <Background variant={BackgroundVariant.Dots} gap={40} size={1}/>
         <Controls />
